@@ -75,7 +75,9 @@ def auth_config() -> dict[str, str | bool]:
 @app.post("/api/v1/lifecycle/requests", status_code=201, tags=["Employee Lifecycle"])
 def submit_lifecycle_request(
     payload: LifecycleRequestCreate,
-    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator")),
+    principal: Principal = Depends(
+        require_roles("Helpdesk.Requester", "Helpdesk.Technician", "Administrator")
+    ),
 ):
     return create_lifecycle_request(payload, principal)
 

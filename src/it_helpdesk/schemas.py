@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import re
 from typing import Literal
 
@@ -102,6 +103,15 @@ class LifecycleRequestCreate(BaseModel):
         if value is not None and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
             raise ValueError("Enter a valid email address.")
         return value.lower() if value else value
+
+    @field_validator("effective_date")
+    @classmethod
+    def validate_effective_date(cls, value: str) -> str:
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("Enter a real calendar date in YYYY-MM-DD format.") from exc
+        return value
 
     @model_validator(mode="after")
     def validate_action_fields(self):

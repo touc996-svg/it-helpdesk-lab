@@ -96,3 +96,8 @@ def test_mover_requires_target_change_and_leaver_forbids_target_fields(client):
     assert client.post("/api/v1/lifecycle/requests", json=invalid_mover).status_code == 422
     invalid_leaver = _joiner_payload() | {"action": "leaver"}
     assert client.post("/api/v1/lifecycle/requests", json=invalid_leaver).status_code == 422
+
+def test_effective_date_must_be_a_real_calendar_date(client):
+    invalid = _joiner_payload() | {"effective_date": "2026-02-30"}
+    response = client.post("/api/v1/lifecycle/requests", json=invalid)
+    assert response.status_code == 422
