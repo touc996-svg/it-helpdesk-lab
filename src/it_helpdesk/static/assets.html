@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IT Asset Management</title>
+<style>
+body{margin:0;padding:25px;background:#0b1020;color:#e8eef8;font:14px system-ui}
+main{max-width:1250px;margin:auto}
+.card{background:#121a2c;padding:20px;border:1px solid #26334a;border-radius:12px;margin:18px 0}
+h1,h2{margin-top:0}input,select,button{padding:10px;background:#172238;color:white;border:1px solid #34445e;border-radius:7px}
+button{background:#2563eb;cursor:pointer}
+form,.toolbar{display:flex;gap:10px;flex-wrap:wrap}
+form input,form select{flex:1;min-width:140px}
+.toolbar input{flex:1;min-width:200px}
+table{width:100%;border-collapse:collapse;text-align:left}
+th,td{padding:12px 8px;border-bottom:1px solid #26334a}
+th{color:#93a4bb;font-size:12px}
+td input,td select{max-width:130px}
+
+table{table-layout:fixed}
+th:nth-child(1),td:nth-child(1){width:17%}
+th:nth-child(2),td:nth-child(2){width:15%}
+th:nth-child(3),td:nth-child(3){width:17%}
+th:nth-child(4),td:nth-child(4){width:17%}
+th:nth-child(5),td:nth-child(5){width:14%}
+th:nth-child(6),td:nth-child(6){width:20%}
+td{white-space:normal;overflow-wrap:anywhere}
+td input,td select{width:100%;min-width:0;max-width:100%;padding:7px}
+td:last-child{white-space:nowrap}
+td:last-child button{padding:7px 8px;font-size:12px;margin:2px}
+@media(max-width:760px){table{min-width:760px}}
+
+.wrap{overflow-x:auto}
+.muted{color:#93a4bb}
+.event{padding:12px;border-bottom:1px solid #26334a}
+#history{display:none}
+a{color:#60a5fa}
+</style>
+</head>
+<body>
+<main>
+<h1>IT Asset Management</h1>
+<p class="muted">Inventory · Ownership · Lifecycle · Audit history</p>
+<p><a href="/dashboard">← Back to Help Desk dashboard</a></p>
+
+<section class="card">
+<h2>Register device</h2>
+<form id="newAsset">
+<input name="asset_tag" placeholder="Asset tag" required>
+<input name="hostname" placeholder="Hostname" required>
+<select name="device_type">
+<option value="laptop">Laptop</option><option value="desktop">Desktop</option>
+<option value="server">Server</option><option value="mobile">Mobile</option>
+<option value="printer">Printer</option><option value="other">Other</option>
+</select>
+<input name="operating_system" placeholder="Operating system" required>
+<input name="assigned_to" placeholder="Assigned employee/team">
+<input name="location" placeholder="Location">
+<button type="submit">Register asset</button>
+</form>
+<p id="createMessage" class="muted"></p>
+</section>
+
+<section class="card">
+<h2>Device inventory</h2>
+<div class="toolbar">
+<input id="search" placeholder="Search asset, hostname, owner or location">
+<select id="filter" onchange="render()">
+<option value="">All statuses</option>
+<option value="in_service">In service</option>
+<option value="in_repair">In repair</option>
+<option value="lost">Lost</option>
+<option value="retired">Retired</option>
+</select>
+<button onclick="load()">Refresh</button>
+</div>
+<div class="wrap">
+<table>
+<thead><tr><th>Asset</th><th>Device / OS</th><th>Assigned to</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody id="rows"><tr><td colspan="6">Loading...</td></tr></tbody>
+</table>
+</div>
+<p id="message" class="muted"></p>
+</section>
+
+<section class="card" id="history">
+<h2 id="historyTitle">Asset audit history</h2>
+<div id="events"></div>
+</section>
+</main>
+<script>
+let inventory=[];
+
+function esc(v){
+ return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+async function api(method,url,data){
+ const r=await fetch(url,{
+  method,headers:{"Content-Type":"application/json"},
+  body:data===undefined?undefined:JSON.stringify(data)
+ });
+ const result=await r.json().catch(()=>({}));
+ if(!r.ok)throw Error(result.detail||"HTTP "+r.status);
+ return result;
+}
+async function load(){
+ const msg=document.getElementById("message");
+ msg.textContent="Loading inventory...";
+ try{
+  inventory=await api("GET","/api/v1/assets");
+  render();
+  msg.textContent=inventory.length+" assets loaded.";
+ }catch(e){msg.textContent="Inventory error: "+e.message;}
+}
+function render(){
+ const q=document.getElementById("search").value.toLowerCase();
+ const status=document.getElementById("filter").value;
+ const list=inventory.filter(a=>{
+  const value=[a.asset_tag,a.hostname,a.device_type,a.operating_system,a.assigned_to,a.location].join(" ").toLowerCase();
+  return (!q||value.includes(q))&&(!status||a.status===status);
+ });
+ document.getElementById("rows").innerHTML=list.length?list.map(a=>`
+ <tr data-tag="${esc(a.asset_tag)}">
+ <td><b>${esc(a.asset_tag)}</b><br>${esc(a.hostname)}</td>
+ <td>${esc(a.device_type)}<br>${esc(a.operating_system)}</td>
+ <td><input class="owner" value="${esc(a.assigned_to)}" aria-label="Assigned owner"></td>
+ <td><input class="location" value="${esc(a.location)}" aria-label="Location"></td>
+ <td><select class="status">${["in_service","in_repair","lost","retired"].map(s=>`<option value="${s}" ${s===a.status?"selected":""}>${s.replaceAll("_"," ")}</option>`).join("")}</select></td>
+ <td><button onclick="save(this)">Save</button> <button onclick="viewAssetHistory('${esc(a.asset_tag)}')">History</button></td>
+ </tr>`).join(""):'<tr><td colspan="6">No matching assets.</td></tr>';
+}
+document.getElementById("search").addEventListener("input",render);
+
+document.getElementById("newAsset").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const data=Object.fromEntries(new FormData(e.currentTarget));
+ for(const k of ["asset_tag","hostname","operating_system"])data[k]=data[k].trim();
+ for(const k of ["assigned_to","location"])data[k]=data[k].trim()||null;
+ const msg=document.getElementById("createMessage");
+ try{
+  const result=await api("POST","/api/v1/assets",data);
+  msg.textContent="Registered "+result.asset_tag;
+  e.currentTarget.reset();
+  await load();
+ }catch(err){msg.textContent="Registration failed: "+err.message;}
+});
+
+async function save(button){
+ const tr=button.closest("tr"),tag=tr.dataset.tag;
+ const data={
+  assigned_to:tr.querySelector(".owner").value.trim()||null,
+  location:tr.querySelector(".location").value.trim()||null,
+  status:tr.querySelector(".status").value
+ };
+ button.disabled=true;
+ try{
+  await api("PATCH","/api/v1/assets/"+encodeURIComponent(tag)+"?actor=IT%20Asset%20Operator",data);
+  document.getElementById("message").textContent=tag+" updated.";
+  await load();
+  await viewAssetHistory(tag);
+ }catch(err){
+  document.getElementById("message").textContent=err.message;
+  button.disabled=false;
+ }
+}
+async function viewAssetHistory(tag){
+ const panel=document.getElementById("history");
+ panel.style.display="block";
+ document.getElementById("historyTitle").textContent="Audit history: "+tag;
+ const target=document.getElementById("events");
+ target.textContent="Loading...";
+ try{
+  const events=await api("GET","/api/v1/assets/"+encodeURIComponent(tag)+"/events");
+  target.innerHTML=events.length?events.slice().reverse().map(e=>`
+   <div class="event"><b>${esc(e.event_type)}</b><br>${esc(e.details)}
+   <br><span class="muted">${esc(e.actor)} · ${esc(e.created_at)}</span></div>`
+  ).join():"No audit events recorded.";
+ }catch(err){target.textContent="History error: "+err.message;}
+}
+load();
+</script>
+</body>
+</html>

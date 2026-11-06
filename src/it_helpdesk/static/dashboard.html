@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IT Operations | Help Desk</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#121a2c;--line:#26334a;--muted:#93a4bb;--text:#e8eef8;--blue:#60a5fa;--green:#34d399;--red:#fb7185;--amber:#fbbf24}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,sans-serif}
+.layout{max-width:1440px;margin:auto;padding:30px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}
+h1{font-size:25px;margin:0 0 5px}.sub{color:var(--muted)}
+button,select,input{background:#172238;border:1px solid var(--line);color:var(--text);padding:10px 13px;border-radius:8px}
+button{cursor:pointer;background:#2563eb;border-color:#2563eb;font-weight:600}
+button:hover{background:#1d4ed8}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin-bottom:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:19px}
+.metric-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+.metric{font-size:31px;font-weight:700;margin-top:8px}
+.red{color:var(--red)}.blue{color:var(--blue)}.green{color:var(--green)}.amber{color:var(--amber)}
+.section{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:18px}
+h2{font-size:16px;margin:0 0 17px}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:15px}
+input{min-width:200px;flex:1}
+table{width:100%;border-collapse:collapse;text-align:left}
+th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase}
+th,td{padding:13px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+td:first-child{font-weight:650}
+.table-wrap{overflow-x:auto}
+.pill{display:inline-block;padding:4px 8px;border-radius:20px;background:#24334b;font-size:11px}
+.p1{color:#fda4af;background:#4c202d}.p2{color:#fdba74;background:#4a3020}
+.p3{color:#93c5fd}.p4{color:#a7f3d0}
+.muted{color:var(--muted)}
+.bar-row{display:grid;grid-template-columns:38px 1fr 25px;gap:9px;align-items:center;margin:14px 0}
+.bar{height:8px;background:#26334a;border-radius:20px;overflow:hidden}
+.fill{height:100%;background:var(--blue);border-radius:20px}
+.side-card{margin-bottom:18px}
+.side-number{font-size:26px;font-weight:700;margin:4px 0}
+#message{color:var(--muted);margin:12px 0}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.section{grid-template-columns:1fr}}
+@media(max-width:560px){.layout{padding:17px}.grid{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}.metric{font-size:25px}}
+
+.toolbar input, .toolbar select { min-width:120px }
+.ticket-controls { display:flex; flex-wrap:wrap; gap:6px; min-width:250px }
+.ticket-controls select,.ticket-controls input { min-width:95px; max-width:145px; padding:7px }
+.ticket-controls button { padding:7px 10px }
+.create-panel { margin-bottom:18px }
+.create-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px }
+.create-form label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-size:12px }
+.create-form input,.create-form select { width:100%; min-width:0 }
+.create-actions { display:flex; align-items:center; gap:12px; margin-top:14px }
+.sla-late { color:var(--red); font-weight:700 }
+.sla-ok { color:var(--green) }
+@media(max-width:650px){.create-form{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+<div class="layout">
+<header>
+  <div>
+    <h1>IT Operations Dashboard</h1>
+    <div class="sub">Service desk performance and infrastructure overview</div>
+  </div>
+  <button onclick="loadDashboard()">↻ Refresh data</button>
+<a href="/asset-management" style="display:inline-block;padding:10px 13px;background:#2563eb;color:white;text-decoration:none;border-radius:8px;font-weight:600">Manage IT Assets →</a>
+</header>
+
+<div class="grid">
+  <div class="card"><div class="metric-label">Total tickets</div><div class="metric blue" id="total">—</div></div>
+  <div class="card"><div class="metric-label">Open tickets</div><div class="metric" id="open">—</div></div>
+  <div class="card"><div class="metric-label">Overdue tickets</div><div class="metric red" id="overdue">—</div></div>
+  <div class="card"><div class="metric-label">Critical P1 tickets</div><div class="metric red" id="critical">—</div></div>
+</div>
+
+
+<details class="card create-panel">
+  <summary style="cursor:pointer;font-weight:650">＋ Create support ticket</summary>
+  <form class="create-form" onsubmit="createTicket(event)" style="margin-top:18px">
+    <label>Issue title<input name="title" required maxlength="200" placeholder="Cannot access company email"></label>
+    <label>Requester name<input name="requester_name" required placeholder="Jane Smith"></label>
+    <label>Requester email<input name="requester_email" type="email" required placeholder="jane@company.com"></label>
+    <label>Category
+      <select name="category" required>
+        <option value="account_access">Account access</option>
+        <option value="hardware">Hardware</option>
+        <option value="software">Software</option>
+        <option value="network">Network</option>
+        <option value="email">Email</option>
+        <option value="security">Security</option>
+        <option value="other">Other</option>
+      </select>
+    </label>
+    <label>Priority<select name="priority"><option>P4</option><option>P3</option><option>P2</option><option>P1</option></select></label>
+    <label>Description<input name="description" required placeholder="Describe the problem"></label>
+    <div class="create-actions" style="grid-column:1/-1">
+      <button type="submit">Create ticket</button>
+      <span id="createMessage" class="muted"></span>
+    </div>
+  </form>
+</details>
+
+<div class="section">
+  <div class="card">
+    <h2>Ticket queue</h2>
+    <div class="toolbar">
+      <input id="search" placeholder="Search ticket, requester, or title..." oninput="renderTickets()">
+      <select id="statusFilter" onchange="renderTickets()">
+        <option value="">All statuses</option>
+        <option value="new">New</option>
+        <option value="in_progress">In progress</option>
+        <option value="waiting_on_user">Waiting on user</option>
+        <option value="resolved">Resolved</option>
+        <option value="closed">Closed</option>
+      </select>
+      <select id="priorityFilter" onchange="renderTickets()">
+        <option value="">All priorities</option>
+        <option>P1</option><option>P2</option><option>P3</option><option>P4</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ticket</th><th>Requester</th><th>Priority</th><th>Status</th><th>Assignment & controls</th><th>SLA deadline</th></tr></thead>
+        <tbody id="ticketRows"><tr><td colspan="5" class="muted">Loading tickets...</td></tr></tbody>
+      </table>
+    </div>
+    <div id="message"></div>
+  </div>
+
+  <div>
+    <div class="card side-card">
+      <h2>Priority distribution</h2>
+      <div id="priorityBars"></div>
+    </div>
+    <div class="card side-card">
+      <h2>Managed resources</h2>
+      <div class="metric blue" id="assets">—</div>
+      <div class="muted">Tracked IT assets</div>
+      <hr style="border-color:var(--line);margin:18px 0">
+      <div class="side-number green" id="articles">—</div>
+      <div class="muted">Published knowledge articles</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+let tickets = [];
+
+async function getJSON(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return response.json();
+}
+
+function safe(value) {
+  return String(value ?? "—").replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderTickets() {
+  const search = document.getElementById("search").value.toLowerCase();
+  const status = document.getElementById("statusFilter").value;
+  const priority = document.getElementById("priorityFilter").value;
+
+  const filtered = tickets.filter(t => {
+    const text = [t.ticket_key,t.title,t.requester_name,t.requester_email]
+      .join(" ").toLowerCase();
+    return (!search || text.includes(search))
+      && (!status || t.status === status)
+      && (!priority || t.priority === priority);
+  });
+
+  document.getElementById("ticketRows").innerHTML = filtered.length
+    ? filtered.map(t => {
+        const due = t.due_at ? new Date(t.due_at) : null;
+        const terminal = ["resolved","closed","cancelled"].includes(t.status);
+        const overdue = due && due < new Date() && !terminal;
+        const dueText = due && !Number.isNaN(due.getTime())
+          ? due.toLocaleString() : "Not set";
+        const statuses = ["new","in_progress","waiting_on_user","resolved","closed","cancelled"];
+        return `<tr data-ticket="${safe(t.ticket_key)}">
+          <td>${safe(t.ticket_key)}<br><span class="muted">${safe(t.title)}</span></td>
+          <td>${safe(t.requester_name)}</td>
+          <td><span class="pill ${safe(String(t.priority).toLowerCase())}">${safe(t.priority)}</span></td>
+          <td><select class="row-status">
+            ${statuses.map(s => `<option value="${s}" ${s===t.status?"selected":""}>${s.replaceAll("_"," ")}</option>`).join("")}
+          </select></td>
+          <td><div class="ticket-controls">
+            <input class="row-assignee" aria-label="Assigned technician" placeholder="Technician" value="${safe(t.assigned_to || "")}">
+            <select class="row-priority" aria-label="Ticket priority">
+              ${["P1","P2","P3","P4"].map(p => `<option ${p===t.priority?"selected":""}>${p}</option>`).join("")}
+            </select>
+            <button onclick="saveTicket(this)">Save</button>
+          </div></td>
+          <td class="${overdue ? "sla-late" : "sla-ok"}">${overdue ? "OVERDUE · " : ""}${safe(dueText)}</td>
+        </tr>`;
+      }).join("")
+    : '<tr><td colspan="6" class="muted">No matching tickets.</td></tr>';
+}
+
+async function createTicket(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.getElementById("createMessage");
+  const data = Object.fromEntries(new FormData(form).entries());
+  data.title = data.title.trim();
+  data.requester_name = data.requester_name.trim();
+  data.requester_email = data.requester_email.trim();
+  data.category = data.category.trim();
+  data.description = data.description.trim();
+
+  message.textContent = "Creating ticket...";
+  try {
+    const response = await fetch("/api/v1/tickets", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(data)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
+    form.reset();
+    message.textContent = `Created ${result.ticket_key || "ticket"} successfully.`;
+    await loadDashboard();
+setInterval(loadDashboard, 30000);
+  } catch (error) {
+    message.textContent = `Could not create ticket: ${error.message}`;
+  }
+}
+
+async function saveTicket(button) {
+  const row = button.closest("tr");
+  const key = row.dataset.ticket;
+  const status = row.querySelector(".row-status").value;
+  const priority = row.querySelector(".row-priority").value;
+  const assigned_to = row.querySelector(".row-assignee").value.trim() || null;
+  button.disabled = true;
+  button.textContent = "Saving...";
+  try {
+    const response = await fetch(
+      `/api/v1/tickets/${encodeURIComponent(key)}?actor=Help%20Desk%20Operator`,
+      {
+        method:"PATCH",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({status,priority,assigned_to})
+      }
+    );
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || `HTTP ${response.status}`);
+    document.getElementById("message").textContent = `${key} updated successfully.`;
+    await loadDashboard();
+  } catch (error) {
+    document.getElementById("message").textContent = `${key}: ${error.message}`;
+    button.disabled = false;
+    button.textContent = "Save";
+  }
+}
+
+function renderPriority() {
+  const counts = Object.fromEntries(["P1","P2","P3","P4"].map(p =>
+    [p,tickets.filter(t => t.priority === p).length]));
+  const max = Math.max(1,...Object.values(counts));
+  document.getElementById("priorityBars").innerHTML =
+    Object.entries(counts).map(([p,n]) => `
+      <div class="bar-row">
+        <strong>${p}</strong>
+        <div class="bar"><div class="fill" style="width:${n/max*100}%"></div></div>
+        <span>${n}</span>
+      </div>`).join("");
+}
+
+async function loadDashboard() {
+  document.getElementById("message").textContent = "Refreshing dashboard...";
+  try {
+    const [summary, ticketData, assets, articles] = await Promise.all([
+      getJSON("/api/v1/dashboard/summary"),
+      getJSON("/api/v1/tickets"),
+      getJSON("/api/v1/assets"),
+      getJSON("/api/v1/knowledge")
+    ]);
+
+    document.getElementById("total").textContent = summary.total_tickets ?? 0;
+    document.getElementById("open").textContent = summary.open_tickets ?? 0;
+    document.getElementById("overdue").textContent = summary.overdue_tickets ?? 0;
+    document.getElementById("critical").textContent = summary.open_p1_tickets ?? 0;
+    document.getElementById("assets").textContent = summary.tracked_assets ?? assets.length;
+    document.getElementById("articles").textContent = summary.published_articles ?? articles.length;
+
+    tickets = Array.isArray(ticketData) ? ticketData : (ticketData.items || []);
+    renderTickets();
+    renderPriority();
+    document.getElementById("message").textContent =
+      `Updated ${new Date().toLocaleTimeString()} · ${tickets.length} tickets loaded`;
+  } catch (error) {
+    document.getElementById("message").textContent =
+      `Dashboard loading error: ${error.message}`;
+  }
+}
+loadDashboard();
+</script>
+</body>
+</html>
