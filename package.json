@@ -1,0 +1,14 @@
+{
+  "name": "it-helpdesk-lab-browser",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "esbuild web/auth.js --bundle --minify --format=iife --target=es2020 --outfile=src/it_helpdesk/static/auth.bundle.js"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "5.28.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.3"
+  }
+}

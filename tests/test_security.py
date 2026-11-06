@@ -7,6 +7,7 @@ def principal_with(*roles):
         subject="11111111-1111-1111-1111-111111111111",
         tenant_id="22222222-2222-2222-2222-222222222222",
         username="security.test@example.test",
+        email="security.test@example.test",
         display_name="Security Test",
         roles=frozenset(roles),
     )
@@ -49,3 +50,21 @@ def test_asset_manager_registration_uses_verified_identity_for_audit(client):
     assert events.status_code == 200
     assert events.json()[0]["event_type"] == "asset_created"
     assert events.json()[0]["actor"] == "security.test@example.test [oid:11111111-1111-1111-1111-111111111111]"
+
+
+def test_ticket_requester_identity_comes_from_verified_principal(client):
+    client.app.dependency_overrides[get_current_principal] = lambda: principal_with(
+        "Helpdesk.Requester"
+    )
+    response = client.post("/api/v1/tickets", json={
+        "title": "Cannot access company email",
+        "description": "Outlook prompts for credentials repeatedly after password reset.",
+        "requester_name": "Forged Requester",
+        "requester_email": "forged@example.test",
+        "category": "email",
+        "priority": "P3",
+    })
+    assert response.status_code == 201
+    ticket = response.json()
+    assert ticket["requester_name"] == "Security Test"
+    assert ticket["requester_email"] == "security.test@example.test"

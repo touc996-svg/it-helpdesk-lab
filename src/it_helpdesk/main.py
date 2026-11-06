@@ -6,6 +6,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from .auth import Principal, require_roles
 
@@ -44,6 +48,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/api/v1/auth/config", tags=["Authentication"])
+def auth_config() -> dict[str, str | bool]:
+    tenant_id = __import__("os").getenv("HELPDESK_ENTRA_TENANT_ID", "").strip()
+    api_client_id = __import__("os").getenv("HELPDESK_ENTRA_API_CLIENT_ID", "").strip()
+    spa_client_id = __import__("os").getenv("HELPDESK_ENTRA_SPA_CLIENT_ID", api_client_id).strip()
+    configured = bool(tenant_id and api_client_id and spa_client_id)
+    return {
+        "configured": configured,
+        "tenantId": tenant_id,
+        "clientId": spa_client_id,
+        "authority": f"https://login.microsoftonline.com/{tenant_id}" if configured else "",
+        "apiScope": f"api://{api_client_id}/access_as_user" if configured else "",
+    }
+
 
 @app.get("/health", tags=["Operations"])
 def health() -> dict[str, str]:
@@ -60,8 +82,14 @@ def submit_ticket(
     payload: TicketCreate,
     principal: Principal = Depends(require_roles("Helpdesk.Requester", "Helpdesk.Technician", "Administrator")),
 ):
+    if not principal.email:
+        raise HTTPException(403, detail="Your Entra token has no email/UPN claim. Add the email optional claim to access tokens in Entra Token configuration.")
+    verified_payload = payload.model_copy(update={
+        "requester_name": principal.display_name,
+        "requester_email": principal.email,
+    })
     try:
-        return create_ticket(payload, actor=principal.audit_actor)
+        return create_ticket(verified_payload, actor=principal.audit_actor)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="Ticket could not be created due to a data conflict.") from exc
 
@@ -151,7 +179,8 @@ def add_knowledge_article(
     principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator")),
 ):
     try:
-        return create_knowledge_article(payload)
+        verified_payload = payload.model_copy(update={"owner": principal.username})
+        return create_knowledge_article(verified_payload)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="Knowledge article slug already exists.") from exc
 

@@ -6,6 +6,9 @@ from functools import lru_cache
 from typing import Callable
 
 import jwt
+from dotenv import load_dotenv
+
+load_dotenv()
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
@@ -20,6 +23,7 @@ class Principal:
     username: str
     display_name: str
     roles: frozenset[str]
+    email: str | None = None
 
     @property
     def audit_actor(self) -> str:
@@ -65,7 +69,7 @@ def get_current_principal(
             audience=api_client_id,
             issuer=f"https://login.microsoftonline.com/{tenant_id}/v2.0",
             leeway=60,
-            options={"require": ["exp", "iss", "aud", "tid", "oid"]},
+            options={"require": ["exp", "iss", "aud", "tid", "oid", "scp"]},
         )
     except jwt.PyJWKClientConnectionError as exc:
         raise HTTPException(
@@ -79,6 +83,10 @@ def get_current_principal(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+    delegated_scopes = set(str(claims.get("scp", "")).split())
+    if "access_as_user" not in delegated_scopes:
+        raise HTTPException(status_code=403, detail="The token is missing the access_as_user delegated scope.")
+
     if claims.get("tid") != tenant_id:
         raise HTTPException(status_code=401, detail="Token tenant does not match this API.")
     subject = claims.get("oid")
@@ -89,7 +97,8 @@ def get_current_principal(
     if not isinstance(raw_roles, list) or any(not isinstance(role, str) for role in raw_roles):
         raise HTTPException(status_code=403, detail="Token contains an invalid roles claim.")
 
-    username = claims.get("preferred_username") or claims.get("upn") or subject
+    username = claims.get("preferred_username") or claims.get("upn") or claims.get("email") or subject
+    email = claims.get("email") or (username if isinstance(username, str) and "@" in username else None)
     display_name = claims.get("name") or username
     return Principal(
         subject=subject,
@@ -97,6 +106,7 @@ def get_current_principal(
         username=str(username),
         display_name=str(display_name),
         roles=frozenset(raw_roles),
+        email=str(email) if email else None,
     )
 
 

@@ -12,3 +12,7 @@ data/*.db-*
 .venv-helpdesk/
 .venv-*/
 logs/
+
+node_modules/
+
+src/it_helpdesk/static/auth.bundle.js

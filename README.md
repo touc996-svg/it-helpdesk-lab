@@ -58,7 +58,7 @@ Or use `scripts/run_local.sh` and `scripts/run_tests.sh`. To populate synthetic 
 | POST | `/api/v1/tickets` | Create a ticket |
 | GET | `/api/v1/tickets` | List and filter tickets |
 | GET | `/api/v1/tickets/{ticket_key}` | Retrieve a ticket |
-| PATCH | `/api/v1/tickets/{ticket_key}?actor=...` | Assign, prioritize, or transition a ticket |
+| PATCH | `/api/v1/tickets/{ticket_key}` | Assign, prioritize, or transition a ticket (actor comes from the verified token) |
 | POST | `/api/v1/tickets/{ticket_key}/comments` | Add an auditable comment |
 | GET | `/api/v1/tickets/{ticket_key}/events` | View ticket history |
 | POST / GET | `/api/v1/assets` | Register and list assets |
@@ -93,3 +93,10 @@ Never store passwords, MFA codes, recovery codes, access tokens, API keys, or pr
 ## Roadmap
 
 See `docs/PROJECT_PLAN.md` and `docs/OPERATIONS_RUNBOOK.md` for the staged enterprise lab plan.
+
+
+## Microsoft Entra setup (local demo)
+
+The API and its tightly coupled dashboard share one single-tenant app registration for this local portfolio demo. In **Authentication**, add a **Single-page application (SPA)** platform with these exact redirect URIs: `http://localhost:18702/dashboard` and `http://localhost:18702/asset-management`. In **Expose an API**, accept the default Application ID URI (`api://<API client ID>`) and add the delegated scope `access_as_user`. In **App roles**, create the five values documented above and assign the signed-in demo user the roles needed for the pages (`Helpdesk.Technician`, `Helpdesk.Requester`, `Asset.Manager`, and optionally `Auditor` / `Administrator`). In **Token configuration**, add the `email` optional claim to access tokens if the tenant does not already emit an email/UPN claim.
+
+The browser uses the official `@azure/msal-browser` package with authorization code flow and PKCE. Build its bundled asset with `npm install && npm run build`. The API requires the `access_as_user` delegated scope as well as valid signature, issuer, audience, tenant, expiry, user object ID, and application role claims. The `.env` file is local-only and must never be committed.

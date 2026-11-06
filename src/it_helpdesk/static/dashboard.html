@@ -67,6 +67,11 @@ td:first-child{font-weight:650}
 <a href="/asset-management" style="display:inline-block;padding:10px 13px;background:#2563eb;color:white;text-decoration:none;border-radius:8px;font-weight:600">Manage IT Assets →</a>
 </header>
 
+<div id="authPanel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0;padding:10px 12px;border:1px solid #34445e;border-radius:9px;background:#121a2c;color:inherit">
+  <span id="authStatus" aria-live="polite">Checking Microsoft sign-in...</span>
+  <button id="authButton" type="button" disabled>Sign in</button>
+</div>
+
 <div class="grid">
   <div class="card"><div class="metric-label">Total tickets</div><div class="metric blue" id="total">—</div></div>
   <div class="card"><div class="metric-label">Open tickets</div><div class="metric" id="open">—</div></div>
@@ -145,11 +150,12 @@ td:first-child{font-weight:650}
 </div>
 </div>
 
+<script src="/static/auth.bundle.js"></script>
 <script>
 let tickets = [];
 
 async function getJSON(url) {
-  const response = await fetch(url);
+  const response = await window.ITHelpdeskAuth.request(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
   return response.json();
 }
@@ -213,7 +219,7 @@ async function createTicket(event) {
 
   message.textContent = "Creating ticket...";
   try {
-    const response = await fetch("/api/v1/tickets", {
+    const response = await window.ITHelpdeskAuth.request("/api/v1/tickets", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify(data)
@@ -223,7 +229,6 @@ async function createTicket(event) {
     form.reset();
     message.textContent = `Created ${result.ticket_key || "ticket"} successfully.`;
     await loadDashboard();
-setInterval(loadDashboard, 30000);
   } catch (error) {
     message.textContent = `Could not create ticket: ${error.message}`;
   }
@@ -238,8 +243,8 @@ async function saveTicket(button) {
   button.disabled = true;
   button.textContent = "Saving...";
   try {
-    const response = await fetch(
-      `/api/v1/tickets/${encodeURIComponent(key)}?actor=Help%20Desk%20Operator`,
+    const response = await window.ITHelpdeskAuth.request(
+      `/api/v1/tickets/${encodeURIComponent(key)}`,
       {
         method:"PATCH",
         headers:{"Content-Type":"application/json"},
@@ -297,7 +302,16 @@ async function loadDashboard() {
       `Dashboard loading error: ${error.message}`;
   }
 }
-loadDashboard();
+window.ITHelpdeskAuthReady.then((auth) => {
+  if (auth.isSignedIn()) {
+    loadDashboard();
+    setInterval(loadDashboard, 30000);
+  } else {
+    document.getElementById("message").textContent = "Sign in with your company Microsoft account to load operations data.";
+  }
+}).catch((error) => {
+  document.getElementById("message").textContent = `Authentication setup error: ${error.message}`;
+});
 </script>
 </body>
 </html>

@@ -14,6 +14,7 @@ def client(tmp_path, monkeypatch):
         subject="00000000-0000-0000-0000-000000000001",
         tenant_id="00000000-0000-0000-0000-000000000002",
         username="test.operator@example.test",
+        email="test.operator@example.test",
         display_name="Test Operator",
         roles=frozenset({
             "Helpdesk.Requester", "Helpdesk.Technician", "Asset.Manager",
