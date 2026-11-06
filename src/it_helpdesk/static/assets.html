@@ -43,6 +43,11 @@ a{color:#60a5fa}
 <h1>IT Asset Management</h1>
 <p class="muted">Inventory · Ownership · Lifecycle · Audit history</p>
 <p><a href="/dashboard">← Back to Help Desk dashboard</a></p>
+<div id="authPanel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0;padding:10px 12px;border:1px solid #34445e;border-radius:9px;background:#121a2c;color:inherit">
+  <span id="authStatus" aria-live="polite">Checking Microsoft sign-in...</span>
+  <button id="authButton" type="button" disabled>Sign in</button>
+</div>
+
 
 <section class="card">
 <h2>Register device</h2>
@@ -89,6 +94,7 @@ a{color:#60a5fa}
 <div id="events"></div>
 </section>
 </main>
+<script src="/static/auth.bundle.js"></script>
 <script>
 let inventory=[];
 
@@ -96,7 +102,7 @@ function esc(v){
  return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 async function api(method,url,data){
- const r=await fetch(url,{
+ const r=await window.ITHelpdeskAuth.request(url,{
   method,headers:{"Content-Type":"application/json"},
   body:data===undefined?undefined:JSON.stringify(data)
  });
@@ -155,7 +161,7 @@ async function save(button){
  };
  button.disabled=true;
  try{
-  await api("PATCH","/api/v1/assets/"+encodeURIComponent(tag)+"?actor=IT%20Asset%20Operator",data);
+  await api("PATCH","/api/v1/assets/"+encodeURIComponent(tag),data);
   document.getElementById("message").textContent=tag+" updated.";
   await load();
   await viewAssetHistory(tag);
@@ -178,7 +184,12 @@ async function viewAssetHistory(tag){
   ).join():"No audit events recorded.";
  }catch(err){target.textContent="History error: "+err.message;}
 }
-load();
+window.ITHelpdeskAuthReady.then((auth) => {
+ if (auth.isSignedIn()) load();
+ else document.getElementById("message").textContent = "Sign in with your company Microsoft account to view inventory.";
+}).catch((error) => {
+ document.getElementById("message").textContent = "Authentication setup error: "+error.message;
+});
 </script>
 </body>
 </html>

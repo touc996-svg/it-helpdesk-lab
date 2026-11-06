@@ -56,7 +56,7 @@ def _event(db: sqlite3.Connection, ticket_id: int, actor: str, event_type: str, 
     )
 
 
-def create_ticket(data: TicketCreate) -> dict[str, Any]:
+def create_ticket(data: TicketCreate, actor: str | None = None) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     created_at = now.isoformat(timespec="seconds")
     due_at = (now + timedelta(hours=SLA_HOURS[data.priority])).isoformat(timespec="seconds")
@@ -74,7 +74,7 @@ def create_ticket(data: TicketCreate) -> dict[str, Any]:
         ticket_id = int(cursor.lastrowid)
         ticket_key = f"HD-{ticket_id:06d}"
         db.execute("UPDATE tickets SET ticket_key = ? WHERE id = ?", (ticket_key, ticket_id))
-        _event(db, ticket_id, data.requester_name, "ticket_created", f"Ticket {ticket_key} created; priority={data.priority}; category={data.category}.")
+        _event(db, ticket_id, actor or data.requester_name, "ticket_created", f"Ticket {ticket_key} created; priority={data.priority}; category={data.category}.")
         row = db.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
     return dict(row)
 
@@ -139,7 +139,7 @@ def list_ticket_events(ticket_key: str) -> list[dict[str, Any]] | None:
     return [dict(row) for row in rows]
 
 
-def create_asset(data: AssetCreate) -> dict[str, Any]:
+def create_asset(data: AssetCreate, actor: str = "system") -> dict[str, Any]:
     now = utc_now()
     with connect() as db:
         cursor = db.execute(
@@ -148,6 +148,11 @@ def create_asset(data: AssetCreate) -> dict[str, Any]:
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (data.asset_tag, data.hostname, data.device_type, data.operating_system,
              data.assigned_to, data.location, data.status, now, now),
+        )
+        db.execute(
+            """INSERT INTO asset_events(asset_id, actor, event_type, details, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (cursor.lastrowid, actor, "asset_created", f"Asset {data.asset_tag} registered.", now),
         )
         row = db.execute("SELECT * FROM assets WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return dict(row)

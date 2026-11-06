@@ -58,7 +58,7 @@ Or use `scripts/run_local.sh` and `scripts/run_tests.sh`. To populate synthetic 
 | POST | `/api/v1/tickets` | Create a ticket |
 | GET | `/api/v1/tickets` | List and filter tickets |
 | GET | `/api/v1/tickets/{ticket_key}` | Retrieve a ticket |
-| PATCH | `/api/v1/tickets/{ticket_key}?actor=...` | Assign, prioritize, or transition a ticket |
+| PATCH | `/api/v1/tickets/{ticket_key}` | Assign, prioritize, or transition a ticket (actor comes from the verified token) |
 | POST | `/api/v1/tickets/{ticket_key}/comments` | Add an auditable comment |
 | GET | `/api/v1/tickets/{ticket_key}/events` | View ticket history |
 | POST / GET | `/api/v1/assets` | Register and list assets |
@@ -72,12 +72,31 @@ Or use `scripts/run_local.sh` and `scripts/run_tests.sh`. To populate synthetic 
 
 The PowerShell scripts are not executable on macOS. They are included as Windows lab exercises for the later phases. Review them and run first with `-WhatIf` in a disposable test domain.
 
-## Security and limitations
+## Identity, access control, and security boundaries
 
-This is a local training project, not a production ITSM platform. It currently has no authentication, authorization, CSRF controls, secrets management, or multi-user tenancy. Keep it bound to `127.0.0.1`; do not expose it to the internet or use real employee data. Ticket events are append-only through the application, but the SQLite file itself is not tamper-proof. Priority windows are simple elapsed-hour training targets, not business-hours SLA calculations.
+The API validates Microsoft Entra ID v2 access tokens using the tenant's published signing keys. Validation pins the accepted signing algorithm to RS256 and checks signature, issuer, audience, expiry, tenant ID, and user object ID. API authorization is enforced through Entra application roles:
 
-Never store passwords, MFA codes, recovery codes, API keys, or production secrets in tickets or sample files.
+| Role | Permission |
+|---|---|
+| `Helpdesk.Requester` | Submit tickets and read published knowledge |
+| `Helpdesk.Technician` | Operate tickets, read inventory, and manage knowledge |
+| `Asset.Manager` | Register and update assets; review asset audit history |
+| `Auditor` | Read operational and audit views |
+| `Administrator` | Administrative access across the API |
+
+Audit actors are derived from validated token claims; clients cannot choose an actor name in ticket updates, comments, or asset updates. Configure `HELPDESK_ENTRA_TENANT_ID` and `HELPDESK_ENTRA_API_CLIENT_ID` using environment variables. Do not commit populated environment files or tokens.
+
+The API and both browser pages use the MSAL browser client to sign users in with Microsoft and send API access tokens on protected requests. The API validates token signature, issuer, audience, tenant, expiry, delegated scope, user object ID, and required application roles. Swagger/API clients may also call protected endpoints using a valid bearer token. The lab still uses SQLite and is not a production ITSM deployment; keep it bound to `127.0.0.1` and do not use real employee data. SQLite files are not tamper-proof, and SLA windows are elapsed-hour training targets rather than business-hours calculations.
+
+Never store passwords, MFA codes, recovery codes, access tokens, API keys, or production secrets in tickets or sample files.
 
 ## Roadmap
 
 See `docs/PROJECT_PLAN.md` and `docs/OPERATIONS_RUNBOOK.md` for the staged enterprise lab plan.
+
+
+## Microsoft Entra setup (local demo)
+
+The API and its tightly coupled dashboard share one single-tenant app registration for this local portfolio demo. In **Authentication**, add a **Single-page application (SPA)** platform with these exact redirect URIs: `http://localhost:18702/dashboard` and `http://localhost:18702/asset-management`. In **Expose an API**, accept the default Application ID URI (`api://<API client ID>`) and add the delegated scope `access_as_user`. In **App roles**, create the five values documented above and assign the signed-in demo user the roles needed for the pages (`Helpdesk.Technician`, `Helpdesk.Requester`, `Asset.Manager`, and optionally `Auditor` / `Administrator`). In **Token configuration**, add the `email` optional claim to access tokens if the tenant does not already emit an email/UPN claim.
+
+The browser uses the official `@azure/msal-browser` package with authorization code flow and PKCE. Build its bundled asset with `npm install && npm run build`. The API requires the `access_as_user` delegated scope as well as valid signature, issuer, audience, tenant, expiry, user object ID, and application role claims. The `.env` file is local-only and must never be committed.
