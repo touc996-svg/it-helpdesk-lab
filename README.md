@@ -86,7 +86,7 @@ The API validates Microsoft Entra ID v2 access tokens using the tenant's publish
 
 Audit actors are derived from validated token claims; clients cannot choose an actor name in ticket updates, comments, or asset updates. Configure `HELPDESK_ENTRA_TENANT_ID` and `HELPDESK_ENTRA_API_CLIENT_ID` using environment variables. Do not commit populated environment files or tokens.
 
-The API is protected, but the static dashboard pages do not yet implement browser-side MSAL sign-in/token acquisition. Their API-driven controls will therefore not work with authentication enabled until the browser client is wired to acquire and send an API access token. Swagger/API clients can test the protected endpoints with a valid bearer token. The lab still uses SQLite and is not a production ITSM deployment; keep it bound to `127.0.0.1` and do not use real employee data. SQLite files are not tamper-proof, and SLA windows are elapsed-hour training targets rather than business-hours calculations.
+The API and both browser pages use the MSAL browser client to sign users in with Microsoft and send API access tokens on protected requests. The API validates token signature, issuer, audience, tenant, expiry, delegated scope, user object ID, and required application roles. Swagger/API clients may also call protected endpoints using a valid bearer token. The lab still uses SQLite and is not a production ITSM deployment; keep it bound to `127.0.0.1` and do not use real employee data. SQLite files are not tamper-proof, and SLA windows are elapsed-hour training targets rather than business-hours calculations.
 
 Never store passwords, MFA codes, recovery codes, access tokens, API keys, or production secrets in tickets or sample files.
 
