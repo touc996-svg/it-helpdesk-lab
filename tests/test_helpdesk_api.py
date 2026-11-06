@@ -33,14 +33,14 @@ def test_ticket_status_workflow_and_invalid_transition(client):
     key = ticket["ticket_key"]
 
     updated = client.patch(
-        f"/api/v1/tickets/{key}?actor=helpdesk.agent",
+        f"/api/v1/tickets/{key}",
         json={"status": "in_progress", "assigned_to": "helpdesk.agent"},
     )
     assert updated.status_code == 200
     assert updated.json()["status"] == "in_progress"
 
     invalid = client.patch(
-        f"/api/v1/tickets/{key}?actor=helpdesk.agent",
+        f"/api/v1/tickets/{key}",
         json={"status": "closed"},
     )
     assert invalid.status_code == 409
@@ -51,7 +51,6 @@ def test_ticket_comment_is_audited(client):
     ticket = create_sample_ticket(client)
     key = ticket["ticket_key"]
     response = client.post(f"/api/v1/tickets/{key}/comments", json={
-        "actor": "helpdesk.agent",
         "comment": "Asked the requester to test Outlook on the web.",
     })
     assert response.status_code == 200

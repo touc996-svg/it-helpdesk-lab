@@ -16,7 +16,7 @@ def test_asset_registration_and_audit_history(client):
     assert response.json()["asset_tag"] == "LAB-TEST-001"
 
     updated = client.patch(
-        "/api/v1/assets/LAB-TEST-001?actor=IT%20Support",
+        "/api/v1/assets/LAB-TEST-001",
         json={
             "assigned_to": "IT Support",
             "location": "Brooklyn Repair Bench",
@@ -32,6 +32,7 @@ def test_asset_registration_and_audit_history(client):
 
     event_types = {event["event_type"] for event in history.json()}
     assert event_types == {
+        "asset_created",
         "assigned_to_updated",
         "location_updated",
         "status_updated",
@@ -46,13 +47,13 @@ def test_retired_asset_cannot_return_to_service(client):
     assert created.status_code == 201
 
     retired = client.patch(
-        "/api/v1/assets/LAB-TEST-002?actor=IT%20Support",
+        "/api/v1/assets/LAB-TEST-002",
         json={"status": "retired"},
     )
     assert retired.status_code == 200
 
     invalid_transition = client.patch(
-        "/api/v1/assets/LAB-TEST-002?actor=IT%20Support",
+        "/api/v1/assets/LAB-TEST-002",
         json={"status": "in_service"},
     )
     assert invalid_transition.status_code == 409

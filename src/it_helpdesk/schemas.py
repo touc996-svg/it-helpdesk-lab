@@ -41,9 +41,8 @@ class TicketUpdate(BaseModel):
 
 
 class CommentCreate(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    actor: str = Field(min_length=2, max_length=100)
     comment: str = Field(min_length=2, max_length=3000)
 
 

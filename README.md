@@ -72,11 +72,23 @@ Or use `scripts/run_local.sh` and `scripts/run_tests.sh`. To populate synthetic 
 
 The PowerShell scripts are not executable on macOS. They are included as Windows lab exercises for the later phases. Review them and run first with `-WhatIf` in a disposable test domain.
 
-## Security and limitations
+## Identity, access control, and security boundaries
 
-This is a local training project, not a production ITSM platform. It currently has no authentication, authorization, CSRF controls, secrets management, or multi-user tenancy. Keep it bound to `127.0.0.1`; do not expose it to the internet or use real employee data. Ticket events are append-only through the application, but the SQLite file itself is not tamper-proof. Priority windows are simple elapsed-hour training targets, not business-hours SLA calculations.
+The API validates Microsoft Entra ID v2 access tokens using the tenant's published signing keys. Validation pins the accepted signing algorithm to RS256 and checks signature, issuer, audience, expiry, tenant ID, and user object ID. API authorization is enforced through Entra application roles:
 
-Never store passwords, MFA codes, recovery codes, API keys, or production secrets in tickets or sample files.
+| Role | Permission |
+|---|---|
+| `Helpdesk.Requester` | Submit tickets and read published knowledge |
+| `Helpdesk.Technician` | Operate tickets, read inventory, and manage knowledge |
+| `Asset.Manager` | Register and update assets; review asset audit history |
+| `Auditor` | Read operational and audit views |
+| `Administrator` | Administrative access across the API |
+
+Audit actors are derived from validated token claims; clients cannot choose an actor name in ticket updates, comments, or asset updates. Configure `HELPDESK_ENTRA_TENANT_ID` and `HELPDESK_ENTRA_API_CLIENT_ID` using environment variables. Do not commit populated environment files or tokens.
+
+The API is protected, but the static dashboard pages do not yet implement browser-side MSAL sign-in/token acquisition. Their API-driven controls will therefore not work with authentication enabled until the browser client is wired to acquire and send an API access token. Swagger/API clients can test the protected endpoints with a valid bearer token. The lab still uses SQLite and is not a production ITSM deployment; keep it bound to `127.0.0.1` and do not use real employee data. SQLite files are not tamper-proof, and SLA windows are elapsed-hour training targets rather than business-hours calculations.
+
+Never store passwords, MFA codes, recovery codes, access tokens, API keys, or production secrets in tickets or sample files.
 
 ## Roadmap
 

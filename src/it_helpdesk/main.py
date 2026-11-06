@@ -1,16 +1,16 @@
 from __future__ import annotations
-from .schemas import AssetUpdate
-from .service import update_asset, list_asset_events
 
 import sqlite3
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
+from .auth import Principal, require_roles
+
 from .database import initialize_database
-from .schemas import AssetCreate, CommentCreate, KnowledgeArticleCreate, TicketCreate, TicketUpdate
+from .schemas import AssetCreate, AssetUpdate, CommentCreate, KnowledgeArticleCreate, TicketCreate, TicketUpdate
 from .service import (
     add_comment,
     create_asset,
@@ -23,6 +23,8 @@ from .service import (
     list_ticket_events,
     list_tickets,
     update_ticket,
+    update_asset,
+    list_asset_events,
 )
 
 
@@ -49,14 +51,17 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/v1/dashboard/summary", tags=["Reporting"])
-def summary() -> dict[str, int]:
+def summary(principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator", "Auditor"))) -> dict[str, int]:
     return dashboard_summary()
 
 
 @app.post("/api/v1/tickets", status_code=201, tags=["Tickets"])
-def submit_ticket(payload: TicketCreate):
+def submit_ticket(
+    payload: TicketCreate,
+    principal: Principal = Depends(require_roles("Helpdesk.Requester", "Helpdesk.Technician", "Administrator")),
+):
     try:
-        return create_ticket(payload)
+        return create_ticket(payload, actor=principal.audit_actor)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="Ticket could not be created due to a data conflict.") from exc
 
@@ -65,6 +70,7 @@ def submit_ticket(payload: TicketCreate):
 def get_tickets(
     status: str | None = Query(default=None),
     priority: str | None = Query(default=None, pattern=r"^P[1-4]$"),
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator", "Auditor")),
 ):
     allowed_statuses = {"new", "in_progress", "waiting_on_user", "resolved", "closed", "cancelled"}
     if status and status not in allowed_statuses:
@@ -73,7 +79,10 @@ def get_tickets(
 
 
 @app.get("/api/v1/tickets/{ticket_key}", tags=["Tickets"])
-def ticket_detail(ticket_key: str):
+def ticket_detail(
+    ticket_key: str,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator", "Auditor")),
+):
     ticket = get_ticket(ticket_key)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found.")
@@ -81,9 +90,13 @@ def ticket_detail(ticket_key: str):
 
 
 @app.patch("/api/v1/tickets/{ticket_key}", tags=["Tickets"])
-def change_ticket(ticket_key: str, payload: TicketUpdate, actor: str = Query(min_length=2, max_length=100)):
+def change_ticket(
+    ticket_key: str,
+    payload: TicketUpdate,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator")),
+):
     try:
-        ticket = update_ticket(ticket_key, payload, actor)
+        ticket = update_ticket(ticket_key, payload, principal.audit_actor)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if ticket is None:
@@ -92,15 +105,22 @@ def change_ticket(ticket_key: str, payload: TicketUpdate, actor: str = Query(min
 
 
 @app.post("/api/v1/tickets/{ticket_key}/comments", tags=["Tickets"])
-def comment_on_ticket(ticket_key: str, payload: CommentCreate):
-    ticket = add_comment(ticket_key, payload.actor, payload.comment)
+def comment_on_ticket(
+    ticket_key: str,
+    payload: CommentCreate,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator")),
+):
+    ticket = add_comment(ticket_key, principal.audit_actor, payload.comment)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found.")
     return {"ticket_key": ticket_key, "status": "comment_added"}
 
 
 @app.get("/api/v1/tickets/{ticket_key}/events", tags=["Tickets"])
-def ticket_history(ticket_key: str):
+def ticket_history(
+    ticket_key: str,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator", "Auditor")),
+):
     events = list_ticket_events(ticket_key)
     if events is None:
         raise HTTPException(status_code=404, detail="Ticket not found.")
@@ -108,20 +128,28 @@ def ticket_history(ticket_key: str):
 
 
 @app.post("/api/v1/assets", status_code=201, tags=["Assets"])
-def register_asset(payload: AssetCreate):
+def register_asset(
+    payload: AssetCreate,
+    principal: Principal = Depends(require_roles("Asset.Manager", "Administrator")),
+):
     try:
-        return create_asset(payload)
+        return create_asset(payload, actor=principal.audit_actor)
     except sqlite3.IntegrityError as exc:
         raise HTTPException(status_code=409, detail="Asset tag or hostname already exists.") from exc
 
 
 @app.get("/api/v1/assets", tags=["Assets"])
-def assets():
+def assets(
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Asset.Manager", "Administrator", "Auditor")),
+):
     return list_assets()
 
 
 @app.post("/api/v1/knowledge", status_code=201, tags=["Knowledge Base"])
-def add_knowledge_article(payload: KnowledgeArticleCreate):
+def add_knowledge_article(
+    payload: KnowledgeArticleCreate,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator")),
+):
     try:
         return create_knowledge_article(payload)
     except sqlite3.IntegrityError as exc:
@@ -129,7 +157,12 @@ def add_knowledge_article(payload: KnowledgeArticleCreate):
 
 
 @app.get("/api/v1/knowledge", tags=["Knowledge Base"])
-def knowledge_articles(include_unpublished: bool = False):
+def knowledge_articles(
+    include_unpublished: bool = False,
+    principal: Principal = Depends(require_roles("Helpdesk.Requester", "Helpdesk.Technician", "Administrator", "Auditor")),
+):
+    if include_unpublished and not principal.roles.intersection({"Helpdesk.Technician", "Administrator", "Auditor"}):
+        raise HTTPException(status_code=403, detail="Your role cannot view draft knowledge articles.")
     return list_knowledge_articles(published_only=not include_unpublished)
 
 
@@ -143,10 +176,10 @@ def dashboard_page():
 def change_asset(
     asset_tag: str,
     payload: AssetUpdate,
-    actor: str = Query(min_length=2, max_length=100),
+    principal: Principal = Depends(require_roles("Asset.Manager", "Administrator")),
 ):
     try:
-        asset = update_asset(asset_tag, payload, actor)
+        asset = update_asset(asset_tag, payload, principal.audit_actor)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -157,7 +190,10 @@ def change_asset(
 
 
 @app.get("/api/v1/assets/{asset_tag}/events", tags=["Assets"])
-def asset_history(asset_tag: str):
+def asset_history(
+    asset_tag: str,
+    principal: Principal = Depends(require_roles("Asset.Manager", "Administrator", "Auditor")),
+):
     events = list_asset_events(asset_tag)
     if events is None:
         raise HTTPException(status_code=404, detail="Asset not found.")
