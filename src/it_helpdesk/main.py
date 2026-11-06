@@ -317,3 +317,9 @@ def asset_history(
 def asset_management_page():
     asset_file = Path(__file__).parent / "static" / "assets.html"
     return HTMLResponse(asset_file.read_text(encoding="utf-8"))
+
+
+@app.get("/employee-lifecycle", response_class=HTMLResponse, include_in_schema=False)
+def employee_lifecycle_page():
+    lifecycle_file = Path(__file__).parent / "static" / "employee_lifecycle.html"
+    return HTMLResponse(lifecycle_file.read_text(encoding="utf-8"))
