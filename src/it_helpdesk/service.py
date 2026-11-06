@@ -296,3 +296,165 @@ def list_asset_events(asset_tag: str) -> list[dict[str, Any]] | None:
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+# Employee Joiner-Mover-Leaver workflow engine. All generated actions are simulation-only.
+from uuid import uuid4
+from .schemas import LifecycleRequestCreate
+
+LIFECYCLE_TASK_TEMPLATES = {
+    "joiner": [
+        ("identity_provision", "Prepare Entra ID account (simulation)", "identity"),
+        ("baseline_access", "Prepare baseline groups and application roles (simulation)", "access"),
+        ("device_assignment", "Assign and verify an onboarding device", "asset"),
+        ("onboarding_handoff", "Confirm manager handoff and onboarding evidence", "handoff"),
+    ],
+    "mover": [
+        ("profile_update", "Prepare employee department and title update (simulation)", "identity"),
+        ("access_review", "Review current groups and application roles", "access_review"),
+        ("remove_old_access", "Prepare removal of obsolete access (simulation)", "access"),
+        ("grant_new_access", "Prepare target role and group access (simulation)", "access"),
+        ("asset_reassignment", "Review device ownership and assignment", "asset"),
+    ],
+    "leaver": [
+        ("session_revocation", "Prepare session revocation (simulation)", "identity"),
+        ("identity_disable", "Prepare Entra ID account disablement (simulation)", "identity"),
+        ("access_removal", "Prepare group and application access removal (simulation)", "access"),
+        ("asset_recovery", "Recover and reconcile assigned equipment", "asset"),
+        ("ticket_handoff", "Review open tickets and transfer ownership", "handoff"),
+    ],
+}
+
+
+def _lifecycle_event(db, request_id: int, principal, event_type: str, details: str) -> None:
+    db.execute(
+        "INSERT INTO lifecycle_events(request_id, actor_subject, actor, event_type, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (request_id, principal.subject, principal.audit_actor, event_type, details, utc_now()),
+    )
+
+
+def _lifecycle_detail(db, row) -> dict[str, Any]:
+    result = dict(row)
+    result["tasks"] = [dict(item) for item in db.execute(
+        "SELECT * FROM lifecycle_tasks WHERE request_id = ? ORDER BY id", (row["id"],)
+    ).fetchall()]
+    result["events"] = [dict(item) for item in db.execute(
+        "SELECT actor_subject, actor, event_type, details, created_at FROM lifecycle_events WHERE request_id = ? ORDER BY id",
+        (row["id"],),
+    ).fetchall()]
+    return result
+
+
+def create_lifecycle_request(data: LifecycleRequestCreate, principal) -> dict[str, Any]:
+    now = utc_now()
+    with connect() as db:
+        cursor = db.execute(
+            """INSERT INTO lifecycle_requests(
+                request_key, action, employee_name, employee_email, employee_number,
+                current_department, current_job_title, current_manager_email,
+                target_department, target_job_title, target_manager_email,
+                effective_date, reason, status, requested_by_subject, requested_by,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval', ?, ?, ?, ?)""",
+            (
+                f"TMP-{uuid4().hex}", data.action, data.employee_name, data.employee_email, data.employee_number,
+                data.current_department, data.current_job_title, data.current_manager_email,
+                data.target_department, data.target_job_title, data.target_manager_email,
+                data.effective_date, data.reason, principal.subject, principal.audit_actor,
+                now, now,
+            ),
+        )
+        request_id = int(cursor.lastrowid)
+        request_key = f"JML-{request_id:06d}"
+        db.execute("UPDATE lifecycle_requests SET request_key = ? WHERE id = ?", (request_key, request_id))
+        _lifecycle_event(db, request_id, principal, "request_created", f"{data.action} request created for {data.employee_email}; approval required.")
+        row = db.execute("SELECT * FROM lifecycle_requests WHERE id = ?", (request_id,)).fetchone()
+        return _lifecycle_detail(db, row)
+
+
+def list_lifecycle_requests(status: str | None = None) -> list[dict[str, Any]]:
+    query = "SELECT * FROM lifecycle_requests"
+    values: tuple = ()
+    if status:
+        query += " WHERE status = ?"
+        values = (status,)
+    query += " ORDER BY created_at DESC, id DESC"
+    with connect() as db:
+        rows = db.execute(query, values).fetchall()
+        results = []
+        for row in rows:
+            item = dict(row)
+            item["task_count"] = db.execute("SELECT COUNT(*) FROM lifecycle_tasks WHERE request_id = ?", (row["id"],)).fetchone()[0]
+            item["completed_task_count"] = db.execute("SELECT COUNT(*) FROM lifecycle_tasks WHERE request_id = ? AND status IN ('completed','skipped')", (row["id"],)).fetchone()[0]
+            results.append(item)
+        return results
+
+
+def get_lifecycle_request(request_key: str) -> dict[str, Any] | None:
+    with connect() as db:
+        row = db.execute("SELECT * FROM lifecycle_requests WHERE request_key = ?", (request_key,)).fetchone()
+        return _lifecycle_detail(db, row) if row else None
+
+
+def decide_lifecycle_request(request_key: str, decision: str, comment: str, principal) -> dict[str, Any] | None:
+    if decision not in {"approved", "rejected"}:
+        raise ValueError("Unsupported lifecycle decision.")
+    with connect() as db:
+        row = db.execute("SELECT * FROM lifecycle_requests WHERE request_key = ?", (request_key,)).fetchone()
+        if row is None:
+            return None
+        if row["status"] != "pending_approval":
+            raise ValueError(f"Request cannot be decided from status {row['status']}.")
+        if row["requested_by_subject"] == principal.subject:
+            raise PermissionError("A request creator cannot approve or reject their own request.")
+        now = utc_now()
+        db.execute(
+            """UPDATE lifecycle_requests
+               SET status = ?, approved_by_subject = ?, approved_by = ?, approval_comment = ?, approved_at = ?, updated_at = ?
+               WHERE id = ?""",
+            (decision, principal.subject, principal.audit_actor, comment, now, now, row["id"]),
+        )
+        if decision == "approved":
+            for task_key, title, task_type in LIFECYCLE_TASK_TEMPLATES[row["action"]]:
+                db.execute(
+                    """INSERT INTO lifecycle_tasks(request_id, task_key, title, task_type, execution_mode, status, created_at)
+                       VALUES (?, ?, ?, ?, 'simulation', 'pending', ?)""",
+                    (row["id"], task_key, title, task_type, now),
+                )
+        _lifecycle_event(db, row["id"], principal, decision, comment)
+        refreshed = db.execute("SELECT * FROM lifecycle_requests WHERE id = ?", (row["id"],)).fetchone()
+        return _lifecycle_detail(db, refreshed)
+
+
+def update_lifecycle_task(request_key: str, task_id: int, status: str, result: str, principal) -> dict[str, Any] | None:
+    if status not in {"in_progress", "completed", "skipped"}:
+        raise ValueError("Unsupported task status.")
+    with connect() as db:
+        request = db.execute("SELECT * FROM lifecycle_requests WHERE request_key = ?", (request_key,)).fetchone()
+        if request is None:
+            return None
+        if request["status"] not in {"approved", "in_progress"}:
+            raise ValueError("Tasks can only be updated after approval.")
+        task = db.execute("SELECT * FROM lifecycle_tasks WHERE id = ? AND request_id = ?", (task_id, request["id"])).fetchone()
+        if task is None:
+            return None
+        if task["status"] in {"completed", "skipped"}:
+            raise ValueError("A completed or skipped task cannot be changed.")
+        completed_at = utc_now() if status in {"completed", "skipped"} else None
+        db.execute(
+            "UPDATE lifecycle_tasks SET status = ?, result = ?, completed_by = ?, completed_at = ? WHERE id = ?",
+            (status, result, principal.audit_actor, completed_at, task_id),
+        )
+        parent_status = "in_progress" if status == "in_progress" else request["status"]
+        counts = db.execute(
+            "SELECT COUNT(*) AS total, SUM(CASE WHEN status IN ('completed','skipped') THEN 1 ELSE 0 END) AS done FROM lifecycle_tasks WHERE request_id = ?",
+            (request["id"],),
+        ).fetchone()
+        if counts["total"] and counts["done"] == counts["total"]:
+            parent_status = "completed"
+        elif status in {"completed", "skipped"} and parent_status == "approved":
+            parent_status = "in_progress"
+        db.execute("UPDATE lifecycle_requests SET status = ?, updated_at = ? WHERE id = ?", (parent_status, utc_now(), request["id"]))
+        _lifecycle_event(db, request["id"], principal, "task_updated", f"{task['task_key']} => {status}: {result}")
+        refreshed = db.execute("SELECT * FROM lifecycle_requests WHERE id = ?", (request["id"],)).fetchone()
+        return _lifecycle_detail(db, refreshed)

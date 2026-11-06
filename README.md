@@ -100,3 +100,21 @@ See `docs/PROJECT_PLAN.md` and `docs/OPERATIONS_RUNBOOK.md` for the staged enter
 The API and its tightly coupled dashboard share one single-tenant app registration for this local portfolio demo. In **Authentication**, add a **Single-page application (SPA)** platform with these exact redirect URIs: `http://localhost:18702/dashboard` and `http://localhost:18702/asset-management`. In **Expose an API**, accept the default Application ID URI (`api://<API client ID>`) and add the delegated scope `access_as_user`. In **App roles**, create the five values documented above and assign the signed-in demo user the roles needed for the pages (`Helpdesk.Technician`, `Helpdesk.Requester`, `Asset.Manager`, and optionally `Auditor` / `Administrator`). In **Token configuration**, add the `email` optional claim to access tokens if the tenant does not already emit an email/UPN claim.
 
 The browser uses the official `@azure/msal-browser` package with authorization code flow and PKCE. Build its bundled asset with `npm install && npm run build`. The API requires the `access_as_user` delegated scope as well as valid signature, issuer, audience, tenant, expiry, user object ID, and application role claims. The `.env` file is local-only and must never be committed.
+
+
+## Employee lifecycle workflows (JML)
+
+The employee lifecycle API manages **joiner**, **mover**, and **leaver** requests with an approval gate, a separate approver identity, generated task checklists, and append-only lifecycle events. A requester cannot approve their own request. Only an Administrator can approve or reject requests; technicians and asset managers can update approved task checklists.
+
+All generated identity and access tasks are explicitly marked `execution_mode=simulation`. The current release does **not** create, disable, delete, or change real Entra users, groups, licenses, sessions, or devices. Each task must be reviewed and recorded manually. This is intentional until a separately permissioned Microsoft Graph adapter, approval policy, and integration test environment are designed and reviewed.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/v1/lifecycle/requests` | Submit a joiner, mover, or leaver request |
+| GET | `/api/v1/lifecycle/requests` | List requests, optionally by status |
+| GET | `/api/v1/lifecycle/requests/{request_key}` | View request, tasks, and audit events |
+| POST | `/api/v1/lifecycle/requests/{request_key}/approve` | Administrator approval; creates the simulation task plan |
+| POST | `/api/v1/lifecycle/requests/{request_key}/reject` | Administrator rejection with recorded rationale |
+| PATCH | `/api/v1/lifecycle/requests/{request_key}/tasks/{task_id}` | Record task progress or completion |
+
+The workflow uses a four-eyes control: the identity that submitted a request cannot approve or reject the same request.

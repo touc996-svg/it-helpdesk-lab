@@ -14,7 +14,7 @@ load_dotenv()
 from .auth import Principal, require_roles
 
 from .database import initialize_database
-from .schemas import AssetCreate, AssetUpdate, CommentCreate, KnowledgeArticleCreate, TicketCreate, TicketUpdate
+from .schemas import AssetCreate, AssetUpdate, CommentCreate, KnowledgeArticleCreate, TicketCreate, TicketUpdate, LifecycleRequestCreate, LifecycleDecisionCreate, LifecycleTaskUpdate
 from .service import (
     add_comment,
     create_asset,
@@ -29,6 +29,11 @@ from .service import (
     update_ticket,
     update_asset,
     list_asset_events,
+    create_lifecycle_request,
+    list_lifecycle_requests,
+    get_lifecycle_request,
+    decide_lifecycle_request,
+    update_lifecycle_task,
 )
 
 
@@ -65,6 +70,83 @@ def auth_config() -> dict[str, str | bool]:
         "authority": f"https://login.microsoftonline.com/{tenant_id}" if configured else "",
         "apiScope": f"api://{api_client_id}/access_as_user" if configured else "",
     }
+
+
+@app.post("/api/v1/lifecycle/requests", status_code=201, tags=["Employee Lifecycle"])
+def submit_lifecycle_request(
+    payload: LifecycleRequestCreate,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator")),
+):
+    return create_lifecycle_request(payload, principal)
+
+
+@app.get("/api/v1/lifecycle/requests", tags=["Employee Lifecycle"])
+def get_lifecycle_requests(
+    status: str | None = Query(default=None, pattern=r"^(pending_approval|approved|rejected|in_progress|completed|cancelled)$"),
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator", "Auditor")),
+):
+    return list_lifecycle_requests(status)
+
+
+@app.get("/api/v1/lifecycle/requests/{request_key}", tags=["Employee Lifecycle"])
+def lifecycle_request_detail(
+    request_key: str,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Administrator", "Auditor")),
+):
+    request = get_lifecycle_request(request_key)
+    if request is None:
+        raise HTTPException(status_code=404, detail="Lifecycle request not found.")
+    return request
+
+
+@app.post("/api/v1/lifecycle/requests/{request_key}/approve", tags=["Employee Lifecycle"])
+def approve_lifecycle_request(
+    request_key: str,
+    payload: LifecycleDecisionCreate,
+    principal: Principal = Depends(require_roles("Administrator")),
+):
+    try:
+        request = decide_lifecycle_request(request_key, "approved", payload.comment, principal)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if request is None:
+        raise HTTPException(status_code=404, detail="Lifecycle request not found.")
+    return request
+
+
+@app.post("/api/v1/lifecycle/requests/{request_key}/reject", tags=["Employee Lifecycle"])
+def reject_lifecycle_request(
+    request_key: str,
+    payload: LifecycleDecisionCreate,
+    principal: Principal = Depends(require_roles("Administrator")),
+):
+    try:
+        request = decide_lifecycle_request(request_key, "rejected", payload.comment, principal)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if request is None:
+        raise HTTPException(status_code=404, detail="Lifecycle request not found.")
+    return request
+
+
+@app.patch("/api/v1/lifecycle/requests/{request_key}/tasks/{task_id}", tags=["Employee Lifecycle"])
+def change_lifecycle_task(
+    request_key: str,
+    task_id: int,
+    payload: LifecycleTaskUpdate,
+    principal: Principal = Depends(require_roles("Helpdesk.Technician", "Asset.Manager", "Administrator")),
+):
+    try:
+        request = update_lifecycle_task(request_key, task_id, payload.status, payload.result, principal)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if request is None:
+        raise HTTPException(status_code=404, detail="Lifecycle request or task not found.")
+    return request
 
 
 @app.get("/health", tags=["Operations"])

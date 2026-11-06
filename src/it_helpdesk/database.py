@@ -108,3 +108,66 @@ def initialize_database() -> None:
             );
             """
         )
+
+        db.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS lifecycle_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_key TEXT NOT NULL UNIQUE,
+                action TEXT NOT NULL CHECK(action IN ('joiner','mover','leaver')),
+                employee_name TEXT NOT NULL,
+                employee_email TEXT NOT NULL,
+                employee_number TEXT,
+                current_department TEXT,
+                current_job_title TEXT,
+                current_manager_email TEXT,
+                target_department TEXT,
+                target_job_title TEXT,
+                target_manager_email TEXT,
+                effective_date TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('pending_approval','approved','rejected','in_progress','completed','cancelled')),
+                requested_by_subject TEXT NOT NULL,
+                requested_by TEXT NOT NULL,
+                approved_by_subject TEXT,
+                approved_by TEXT,
+                approval_comment TEXT,
+                approved_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_requests_status_date
+                ON lifecycle_requests(status, effective_date);
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_requests_employee
+                ON lifecycle_requests(employee_email, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS lifecycle_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER NOT NULL REFERENCES lifecycle_requests(id) ON DELETE CASCADE,
+                task_key TEXT NOT NULL,
+                title TEXT NOT NULL,
+                task_type TEXT NOT NULL,
+                execution_mode TEXT NOT NULL DEFAULT 'simulation' CHECK(execution_mode IN ('simulation','manual')),
+                status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed','skipped')),
+                result TEXT,
+                completed_by TEXT,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(request_id, task_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_tasks_request
+                ON lifecycle_tasks(request_id, id);
+
+            CREATE TABLE IF NOT EXISTS lifecycle_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER NOT NULL REFERENCES lifecycle_requests(id) ON DELETE CASCADE,
+                actor_subject TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                details TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_events_request
+                ON lifecycle_events(request_id, id);
+            """
+        )
