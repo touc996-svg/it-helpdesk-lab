@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employee Lifecycle | IT Operations</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg:#0b1020; --panel:#121a2c; --line:#26334a;
+  --muted:#93a4bb; --text:#e8eef8; --blue:#60a5fa;
+  --green:#34d399; --red:#fb7185; --amber:#fbbf24;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--bg); color:var(--text);
+  font:14px system-ui,-apple-system,sans-serif;
+}
+main { max-width:1450px; margin:auto; padding:28px; }
+header {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px; margin-bottom:22px; flex-wrap:wrap;
+}
+h1 { margin:0 0 6px; font-size:26px; }
+h2 { margin:0 0 16px; font-size:17px; }
+h3 { margin:0 0 10px; font-size:14px; }
+.sub,.muted { color:var(--muted); }
+a { color:var(--blue); text-decoration:none; }
+a:hover { text-decoration:underline; }
+button,input,select,textarea {
+  font:inherit; color:var(--text); background:#172238;
+  border:1px solid #34445e; border-radius:8px; padding:10px 12px;
+}
+button { cursor:pointer; background:#2563eb; border-color:#2563eb; font-weight:650; }
+button:hover { background:#1d4ed8; }
+button:disabled { opacity:.55; cursor:not-allowed; }
+button.secondary { background:#26334a; border-color:#3a4b65; }
+button.danger { background:#9f2941; border-color:#9f2941; }
+.grid {
+  display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px; margin:20px 0;
+}
+.card {
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:12px; padding:19px; min-width:0;
+}
+.metric-label {
+  color:var(--muted); font-size:11px; text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.metric { font-size:29px; font-weight:750; margin-top:8px; }
+.blue { color:var(--blue); } .green { color:var(--green); }
+.red { color:var(--red); } .amber { color:var(--amber); }
+.columns {
+  display:grid; grid-template-columns:minmax(340px,.9fr) minmax(0,1.5fr);
+  gap:18px; align-items:start;
+}
+form { display:grid; gap:12px; }
+.fields { display:grid; grid-template-columns:1fr 1fr; gap:11px; }
+label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-size:12px; }
+input,select,textarea { width:100%; min-width:0; }
+textarea { min-height:88px; resize:vertical; }
+.full { grid-column:1/-1; }
+.actions { display:flex; flex-wrap:wrap; align-items:center; gap:9px; }
+.toolbar { display:flex; gap:9px; flex-wrap:wrap; margin-bottom:14px; }
+.toolbar input { flex:1; min-width:160px; }
+.toolbar select { min-width:150px; }
+.request-list { display:grid; gap:9px; }
+.request {
+  background:#172238; border:1px solid var(--line);
+  border-radius:9px; padding:13px; cursor:pointer;
+}
+.request:hover,.request.selected { border-color:var(--blue); }
+.request-top { display:flex; justify-content:space-between; gap:10px; }
+.request-title { font-weight:700; }
+.request-meta { color:var(--muted); font-size:12px; margin-top:6px; }
+.pill {
+  display:inline-block; padding:4px 8px; border-radius:20px;
+  background:#26334a; font-size:11px; white-space:nowrap;
+}
+.pending_approval { color:var(--amber); }
+.approved,.completed { color:var(--green); }
+.rejected,.cancelled { color:var(--red); }
+.in_progress { color:var(--blue); }
+.detail { margin-top:18px; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.detail-item { background:#172238; border-radius:8px; padding:11px; overflow-wrap:anywhere; }
+.detail-item small { display:block; color:var(--muted); margin-bottom:5px; }
+.task {
+  border:1px solid var(--line); background:#172238;
+  border-radius:9px; padding:13px; margin:9px 0;
+}
+.task-top { display:flex; justify-content:space-between; gap:10px; }
+.task p { color:var(--muted); font-size:12px; }
+.task-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.task-actions select { width:auto; }
+.event {
+  border-left:2px solid #3b82f6; padding:5px 0 10px 13px;
+  margin:8px 0; overflow-wrap:anywhere;
+}
+.event small { color:var(--muted); }
+.notice {
+  padding:11px 13px; border:1px solid #735b25;
+  background:#342a17; color:#fcd98b; border-radius:9px;
+  margin:15px 0; line-height:1.5;
+}
+#message,#formMessage { color:var(--muted); margin-top:12px; white-space:pre-wrap; }
+.empty { color:var(--muted); padding:18px 4px; }
+hr { border:0; border-top:1px solid var(--line); margin:18px 0; }
+@media(max-width:950px) {
+  .columns { grid-template-columns:1fr; }
+}
+@media(max-width:650px) {
+  main { padding:16px; }
+  .grid { grid-template-columns:1fr 1fr; }
+  .fields,.detail-grid { grid-template-columns:1fr; }
+  .full { grid-column:auto; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <h1>Employee Lifecycle Operations</h1>
+    <div class="sub">Joiner · Mover · Leaver management and approval workflow</div>
+  </div>
+  <div class="actions">
+    <a href="/dashboard">← Help Desk</a>
+    <button class="secondary" type="button" onclick="loadRequests()">Refresh queue</button>
+  </div>
+</header>
+
+<div id="authPanel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 13px;border:1px solid #34445e;border-radius:9px;background:#121a2c">
+  <span id="authStatus" aria-live="polite">Checking Microsoft sign-in...</span>
+  <button id="authButton" type="button" disabled>Sign in</button>
+</div>
+
+<div class="notice">
+  <strong>Simulation mode:</strong> This workflow does not create, disable, or modify
+  real Microsoft Entra accounts, groups, licenses, sessions, or devices.
+  Tasks record manual review and completion only.
+</div>
+
+<div class="grid">
+  <div class="card"><div class="metric-label">Total requests</div><div class="metric blue" id="totalCount">—</div></div>
+  <div class="card"><div class="metric-label">Awaiting approval</div><div class="metric amber" id="pendingCount">—</div></div>
+  <div class="card"><div class="metric-label">In progress</div><div class="metric blue" id="progressCount">—</div></div>
+  <div class="card"><div class="metric-label">Completed</div><div class="metric green" id="completedCount">—</div></div>
+</div>
+
+<div class="columns">
+  <section class="card">
+    <h2>＋ Submit lifecycle request</h2>
+    <form id="requestForm">
+      <div class="fields">
+        <label>Request type
+          <select name="action" id="action">
+            <option value="joiner">Joiner — New employee</option>
+            <option value="mover">Mover — Role or department change</option>
+            <option value="leaver">Leaver — Employee departure</option>
+          </select>
+        </label>
+        <label>Effective date
+          <input name="effective_date" type="date" required>
+        </label>
+        <label>Employee name
+          <input name="employee_name" required maxlength="100" placeholder="Taylor Morgan">
+        </label>
+        <label>Employee email
+          <input name="employee_email" type="email" required maxlength="254" placeholder="employee@company.com">
+        </label>
+        <label>Employee number
+          <input name="employee_number" maxlength="80" placeholder="EMP-2048">
+        </label>
+        <label>Current department
+          <input name="current_department" maxlength="120" placeholder="Current department">
+        </label>
+        <label>Current job title
+          <input name="current_job_title" maxlength="120" placeholder="Current job title">
+        </label>
+        <label>Current manager email
+          <input name="current_manager_email" type="email" maxlength="254" placeholder="manager@company.com">
+        </label>
+      </div>
+
+      <div id="targetFields">
+        <hr>
+        <h3>Target role information</h3>
+        <div class="fields">
+          <label>Target department
+            <input name="target_department" maxlength="120" placeholder="New department">
+          </label>
+          <label>Target job title
+            <input name="target_job_title" maxlength="120" placeholder="New job title">
+          </label>
+          <label class="full">Target manager email
+            <input name="target_manager_email" type="email" maxlength="254" placeholder="new.manager@company.com">
+          </label>
+        </div>
+      </div>
+
+      <label>Business reason
+        <textarea name="reason" required minlength="10" maxlength="2000" placeholder="Explain the business reason and include the relevant approval context."></textarea>
+      </label>
+      <div class="actions">
+        <button type="submit" id="submitButton">Submit for approval</button>
+        <span id="formMessage" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Lifecycle request queue</h2>
+    <div class="toolbar">
+      <input id="search" placeholder="Search request, employee, email..." aria-label="Search requests">
+      <select id="statusFilter" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="pending_approval">Pending approval</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="in_progress">In progress</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <select id="actionFilter" aria-label="Filter by request type">
+        <option value="">All request types</option>
+        <option value="joiner">Joiner</option>
+        <option value="mover">Mover</option>
+        <option value="leaver">Leaver</option>
+      </select>
+    </div>
+    <div id="queue" class="request-list"><div class="empty">Sign in to load requests.</div></div>
+    <div id="message" aria-live="polite"></div>
+  </section>
+</div>
+
+<section class="card detail" id="detailPanel">
+  <h2>Request details</h2>
+  <div class="empty">Select a request from the queue to inspect its details, approval status, tasks, and audit history.</div>
+</section>
+</main>
+
+<script src="/static/auth.bundle.js"></script>
+<script>
+let requests = [];
+let selectedKey = null;
+
+const $ = id => document.getElementById(id);
+
+function esc(value) {
+  return String(value ?? "—").replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[c]));
+}
+
+function pretty(value) {
+  return String(value || "").replaceAll("_"," ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function api(method, url, data) {
+  const options = {method, headers:{}};
+  if (data !== undefined) {
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(data);
+  }
+  const response = await window.ITHelpdeskAuth.request(url, options);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(body.detail || `HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
+
+function updateActionFields() {
+  const action = $("action").value;
+  $("targetFields").style.display = action === "leaver" ? "none" : "block";
+  const required = action === "joiner";
+  $("requestForm").elements.target_department.required = required;
+  $("requestForm").elements.target_job_title.required = required;
+}
+$("action").addEventListener("change", updateActionFields);
+updateActionFields();
+
+function renderStats() {
+  $("totalCount").textContent = requests.length;
+  $("pendingCount").textContent = requests.filter(r => r.status === "pending_approval").length;
+  $("progressCount").textContent = requests.filter(r => ["approved","in_progress"].includes(r.status)).length;
+  $("completedCount").textContent = requests.filter(r => r.status === "completed").length;
+}
+
+function renderQueue() {
+  const query = $("search").value.toLowerCase();
+  const status = $("statusFilter").value;
+  const action = $("actionFilter").value;
+
+  const filtered = requests.filter(r => {
+    const text = [r.request_key,r.employee_name,r.employee_email,r.employee_number,r.reason]
+      .join(" ").toLowerCase();
+    return (!query || text.includes(query))
+      && (!status || r.status === status)
+      && (!action || r.action === action);
+  });
+
+  $("queue").innerHTML = filtered.length ? filtered.map(r => `
+    <article class="request ${selectedKey === r.request_key ? "selected" : ""}"
+      data-key="${esc(r.request_key)}" tabindex="0" role="button"
+      onclick="openRequest('${esc(r.request_key)}')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openRequest('${esc(r.request_key)}')}">
+      <div class="request-top">
+        <span class="request-title">${esc(r.request_key)} · ${esc(r.employee_name)}</span>
+        <span class="pill ${esc(r.status)}">${esc(pretty(r.status))}</span>
+      </div>
+      <div class="request-meta">${esc(pretty(r.action))} · ${esc(r.employee_email)}</div>
+      <div class="request-meta">Effective: ${esc(r.effective_date)} · Tasks: ${Number(r.completed_task_count || 0)}/${Number(r.task_count || 0)} complete</div>
+    </article>
+  `).join("") : '<div class="empty">No requests match these filters.</div>';
+}
+
+async function loadRequests() {
+  $("message").textContent = "Loading lifecycle requests...";
+  try {
+    const data = await api("GET","/api/v1/lifecycle/requests");
+    requests = Array.isArray(data) ? data : [];
+    renderStats();
+    renderQueue();
+    $("message").textContent = `${requests.length} requests loaded · ${new Date().toLocaleTimeString()}`;
+    if (selectedKey && requests.some(r => r.request_key === selectedKey)) {
+      await openRequest(selectedKey, false);
+    } else {
+      selectedKey = null;
+    }
+  } catch (error) {
+    requests = [];
+    renderStats();
+    renderQueue();
+    if (error.status === 403) {
+      $("message").textContent = "Your role can submit requests, but viewing the shared queue requires Helpdesk.Technician, Administrator, or Auditor access.";
+    } else {
+      $("message").textContent = `Could not load requests: ${error.message}`;
+    }
+  }
+}
+
+async function openRequest(key, rerender = true) {
+  selectedKey = key;
+  if (rerender) renderQueue();
+  const panel = $("detailPanel");
+  panel.innerHTML = '<h2>Request details</h2><div class="empty">Loading request...</div>';
+  try {
+    const r = await api("GET",`/api/v1/lifecycle/requests/${encodeURIComponent(key)}`);
+    const tasks = Array.isArray(r.tasks) ? r.tasks : [];
+    const events = Array.isArray(r.events) ? r.events : [];
+    const canDecide = r.status === "pending_approval";
+
+    panel.innerHTML = `
+      <div class="request-top">
+        <div>
+          <h2>${esc(r.request_key)} · ${esc(pretty(r.action))}</h2>
+          <div class="muted">${esc(r.employee_name)} · ${esc(r.employee_email)}</div>
+        </div>
+        <span class="pill ${esc(r.status)}">${esc(pretty(r.status))}</span>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item"><small>Employee number</small>${esc(r.employee_number)}</div>
+        <div class="detail-item"><small>Effective date</small>${esc(r.effective_date)}</div>
+        <div class="detail-item"><small>Current department / title</small>${esc(r.current_department)} / ${esc(r.current_job_title)}</div>
+        <div class="detail-item"><small>Current manager</small>${esc(r.current_manager_email)}</div>
+        <div class="detail-item"><small>Target department / title</small>${esc(r.target_department)} / ${esc(r.target_job_title)}</div>
+        <div class="detail-item"><small>Target manager</small>${esc(r.target_manager_email)}</div>
+        <div class="detail-item"><small>Requested by</small>${esc(r.requested_by)}</div>
+        <div class="detail-item"><small>Created</small>${esc(r.created_at)}</div>
+      </div>
+      <div class="detail-item" style="margin-top:12px">
+        <small>Business reason</small>${esc(r.reason)}
+      </div>
+      ${r.approved_by ? `<div class="detail-item" style="margin-top:10px"><small>Decision by</small>${esc(r.approved_by)} · ${esc(r.approval_comment)}</div>` : ""}
+      ${canDecide ? `
+        <div class="actions" style="margin-top:14px">
+          <button onclick="decideRequest('${esc(key)}','approve')">Approve request</button>
+          <button class="danger" onclick="decideRequest('${esc(key)}','reject')">Reject request</button>
+          <span class="muted">Administrator only · request creator cannot approve their own request</span>
+        </div>` : ""}
+      <hr>
+      <h3>Task checklist · ${tasks.length} tasks</h3>
+      <div id="taskList">
+        ${tasks.length ? tasks.map(t => `
+          <div class="task">
+            <div class="task-top">
+              <strong>${esc(t.title)}</strong>
+              <span class="pill">${esc(pretty(t.status))}</span>
+            </div>
+            <p>Task type: ${esc(t.task_type)} · Execution: ${esc(t.execution_mode)}</p>
+            ${t.result ? `<p>Recorded result: ${esc(t.result)}</p>` : ""}
+            ${!["completed","skipped"].includes(t.status) && ["approved","in_progress"].includes(r.status) ? `
+              <div class="task-actions">
+                <select id="taskStatus-${Number(t.id)}">
+                  <option value="in_progress" ${t.status==="in_progress"?"selected":""}>In progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="skipped">Skipped</option>
+                </select>
+                <button class="secondary" onclick="updateTask('${esc(key)}',${Number(t.id)})">Record update</button>
+              </div>` : ""}
+            ${t.completed_by ? `<p>Recorded by ${esc(t.completed_by)} · ${esc(t.completed_at)}</p>` : ""}
+          </div>`).join("") : '<div class="empty">Tasks are generated after approval.</div>'}
+      </div>
+      <hr>
+      <h3>Audit history · ${events.length} events</h3>
+      <div>
+        ${events.length ? events.slice().reverse().map(e => `
+          <div class="event">
+            <strong>${esc(pretty(e.event_type))}</strong><br>
+            ${esc(e.details)}<br>
+            <small>${esc(e.actor)} · ${esc(e.created_at)}</small>
+          </div>`).join("") : '<div class="empty">No audit events recorded.</div>'}
+      </div>
+    `;
+  } catch (error) {
+    panel.innerHTML = `<h2>Request details</h2><div class="empty">Could not load request: ${esc(error.message)}</div>`;
+  }
+}
+
+async function decideRequest(key, decision) {
+  const comment = window.prompt(
+    decision === "approve" ? "Enter approval rationale:" : "Enter rejection rationale:"
+  );
+  if (comment === null) return;
+  if (comment.trim().length < 5) {
+    alert("Please enter at least 5 characters.");
+    return;
+  }
+  try {
+    await api("POST",`/api/v1/lifecycle/requests/${encodeURIComponent(key)}/${decision}`,{comment:comment.trim()});
+    $("message").textContent = `${key} ${decision}d successfully.`;
+    await loadRequests();
+    await openRequest(key);
+  } catch (error) {
+    $("message").textContent = `Decision failed: ${error.message}`;
+  }
+}
+
+async function updateTask(key, taskId) {
+  const status = $(`taskStatus-${taskId}`).value;
+  const result = window.prompt("Record the manual review or simulation result:");
+  if (result === null) return;
+  if (result.trim().length < 5) {
+    alert("Please enter at least 5 characters describing the result.");
+    return;
+  }
+  try {
+    await api("PATCH",
+      `/api/v1/lifecycle/requests/${encodeURIComponent(key)}/tasks/${taskId}`,
+      {status,result:result.trim()}
+    );
+    $("message").textContent = `Task ${taskId} updated.`;
+    await loadRequests();
+    await openRequest(key);
+  } catch (error) {
+    $("message").textContent = `Task update failed: ${error.message}`;
+  }
+}
+
+$("requestForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const payload = {};
+  for (const [key,value] of Object.entries(values)) {
+    payload[key] = typeof value === "string" ? value.trim() : value;
+  }
+
+  for (const key of [
+    "employee_number","current_department","current_job_title",
+    "current_manager_email","target_department","target_job_title","target_manager_email"
+  ]) {
+    if (!payload[key]) payload[key] = null;
+  }
+  if (payload.action === "leaver") {
+    payload.target_department = null;
+    payload.target_job_title = null;
+    payload.target_manager_email = null;
+  }
+
+  $("submitButton").disabled = true;
+  $("formMessage").textContent = "Submitting request...";
+  try {
+    const created = await api("POST","/api/v1/lifecycle/requests",payload);
+    $("formMessage").textContent = `Created ${created.request_key}. Approval is required.`;
+    form.reset();
+    updateActionFields();
+    await loadRequests();
+    if (created.request_key) await openRequest(created.request_key);
+  } catch (error) {
+    $("formMessage").textContent = `Submission failed: ${error.message}`;
+  } finally {
+    $("submitButton").disabled = false;
+  }
+});
+
+$("search").addEventListener("input",renderQueue);
+$("statusFilter").addEventListener("change",renderQueue);
+$("actionFilter").addEventListener("change",renderQueue);
+
+window.ITHelpdeskAuthReady.then(auth => {
+  if (auth.isSignedIn()) {
+    loadRequests();
+  } else {
+    $("message").textContent = "Sign in with your Microsoft account to submit or review lifecycle requests.";
+  }
+}).catch(error => {
+  $("message").textContent = `Authentication setup error: ${error.message}`;
+});
+</script>
+</body>
+</html>
