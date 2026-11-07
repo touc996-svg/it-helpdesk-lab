@@ -52,6 +52,15 @@ td:first-child{font-weight:650}
 .create-actions { display:flex; align-items:center; gap:12px; margin-top:14px }
 .sla-late { color:var(--red); font-weight:700 }
 .sla-ok { color:var(--green) }
+.ai-assist-button { background:#6d4aff; border-color:#6d4aff }
+.ai-assist-button:hover { background:#5938d5 }
+.ai-assist-panel { margin-top:16px; border:1px solid #40547a; background:#101b31 }
+.ai-assist-panel h3 { margin:0 0 12px }
+.ai-assist-panel ul { padding-left:20px; line-height:1.7 }
+.ai-assist-meta { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 }
+.ai-assist-meta span { background:#24334b; border-radius:7px; padding:6px 9px; font-size:12px }
+.ai-assist-note { color:var(--amber); font-size:12px }
+
 @media(max-width:650px){.create-form{grid-template-columns:1fr}}
 
 </style>
@@ -131,6 +140,7 @@ td:first-child{font-weight:650}
         <tbody id="ticketRows"><tr><td colspan="5" class="muted">Loading tickets...</td></tr></tbody>
       </table>
     </div>
+    <div id="aiAssistPanel" class="card ai-assist-panel" hidden aria-live="polite"></div>
     <div id="message"></div>
   </div>
 
@@ -199,7 +209,7 @@ function renderTickets() {
             <select class="row-priority" aria-label="Ticket priority">
               ${["P1","P2","P3","P4"].map(p => `<option ${p===t.priority?"selected":""}>${p}</option>`).join("")}
             </select>
-            <button onclick="saveTicket(this)">Save</button>
+            <button onclick="saveTicket(this)">Save</button><button class="ai-assist-button" onclick="analyzeTicket(this)">AI Assist</button>
           </div></td>
           <td class="${overdue ? "sla-late" : "sla-ok"}">${overdue ? "OVERDUE · " : ""}${safe(dueText)}</td>
         </tr>`;
@@ -260,6 +270,57 @@ async function saveTicket(button) {
     document.getElementById("message").textContent = `${key}: ${error.message}`;
     button.disabled = false;
     button.textContent = "Save";
+  }
+}
+
+async function analyzeTicket(button) {
+  const row = button.closest("tr");
+  const key = row.dataset.ticket;
+  const panel = document.getElementById("aiAssistPanel");
+  button.disabled = true;
+  button.textContent = "Analyzing...";
+  panel.hidden = false;
+  panel.innerHTML = `<h3>AI Assist · ${safe(key)}</h3><p class="muted">Analyzing ticket and searching published knowledge articles...</p>`;
+
+  try {
+    const response = await window.ITHelpdeskAuth.request(
+      `/api/v1/tickets/${encodeURIComponent(key)}/ai-assist`,
+      { method:"POST" }
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+
+    const steps = (data.troubleshooting_steps || [])
+      .map(item => `<li>${safe(item)}</li>`).join("");
+    const articles = (data.knowledge_matches || []).length
+      ? data.knowledge_matches.map(item =>
+          `<li><strong>${safe(item.title)}</strong> · ${safe(item.category)}<br>
+           <span class="muted">${safe(item.resolution_steps)}</span></li>`
+        ).join("")
+      : "<li>No matching published knowledge article was found.</li>";
+
+    panel.innerHTML = `
+      <h3>AI Assist · ${safe(data.ticket_key)}</h3>
+      <p>${safe(data.summary)}</p>
+      <div class="ai-assist-meta">
+        <span>Suggested category: <strong>${safe(data.suggested_category)}</strong></span>
+        <span>Suggested priority: <strong>${safe(data.suggested_priority)}</strong></span>
+        <span>Confidence: <strong>${safe(data.category_confidence)}</strong></span>
+      </div>
+      <p><strong>Priority rationale:</strong> ${safe(data.priority_reason)}</p>
+      <p><strong>Category signals:</strong> ${safe((data.category_signals || []).join(", ") || "No strong keyword match")}</p>
+      <h3>Troubleshooting recommendations</h3>
+      <ul>${steps}</ul>
+      <h3>Knowledge base matches</h3>
+      <ul>${articles}</ul>
+      <p class="ai-assist-note">Technician review required. These are recommendations only; the ticket has not been changed.</p>
+    `;
+    panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+  } catch (error) {
+    panel.innerHTML = `<h3>AI Assist · ${safe(key)}</h3><p class="red">${safe(error.message)}</p>`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "AI Assist";
   }
 }
 

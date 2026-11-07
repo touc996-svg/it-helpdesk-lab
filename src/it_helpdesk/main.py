@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from .auth import Principal, require_roles
+from .ai_assistant import analyze_ticket
 
 from .database import initialize_database
 from .schemas import AssetCreate, AssetUpdate, CommentCreate, KnowledgeArticleCreate, TicketCreate, TicketUpdate, LifecycleRequestCreate, LifecycleDecisionCreate, LifecycleTaskUpdate
@@ -237,6 +238,21 @@ def ticket_history(
     if events is None:
         raise HTTPException(status_code=404, detail="Ticket not found.")
     return events
+
+
+@app.post("/api/v1/tickets/{ticket_key}/ai-assist", tags=["AI Assistant"])
+def analyze_ticket_with_ai(
+    ticket_key: str,
+    principal: Principal = Depends(
+        require_roles("Helpdesk.Technician", "Administrator")
+    ),
+):
+    ticket = get_ticket(ticket_key)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found.")
+
+    articles = list_knowledge_articles(published_only=True)
+    return analyze_ticket(ticket, articles)
 
 
 @app.post("/api/v1/assets", status_code=201, tags=["Assets"])
