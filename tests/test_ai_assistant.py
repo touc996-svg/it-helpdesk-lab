@@ -37,6 +37,8 @@ def test_ai_assist_suggests_category_and_finds_knowledge(client):
     result = response.json()
 
     assert result["suggested_category"] == "email"
+    assert result["category_source"] == "keyword_match"
+    assert result["category_confidence"] in {"moderate", "high"}
     assert result["suggested_priority"] == "P3"
     assert result["requires_technician_review"] is True
     assert result["ticket_modified"] is False
@@ -61,9 +63,30 @@ def test_ai_assist_does_not_modify_ticket(client):
     assert stored["priority"] == "P4"
     assert stored["status"] == "new"
     assert response.json()["suggested_category"] == "network"
+    assert response.json()["category_source"] == "keyword_match"
     assert response.json()["suggested_priority"] == "P2"
 
 
 def test_ai_assist_returns_404_for_unknown_ticket(client):
     response = client.post("/api/v1/tickets/HD-999999/ai-assist")
     assert response.status_code == 404
+
+
+def test_ai_assist_labels_existing_category_as_fallback(client):
+    ticket = create_ticket(
+        client,
+        "Dashboard workflow verification. Verify ticket creation and refresh.",
+        category="software",
+        priority="P3",
+    )
+    response = client.post(
+        f"/api/v1/tickets/{ticket['ticket_key']}/ai-assist"
+    )
+    assert response.status_code == 200
+    result = response.json()
+
+    assert result["suggested_category"] == "software"
+    assert result["category_source"] == "existing_ticket_fallback"
+    assert result["category_confidence"] == "not_detected"
+    assert result["category_signals"] == []
+    assert result["knowledge_matches"] == []

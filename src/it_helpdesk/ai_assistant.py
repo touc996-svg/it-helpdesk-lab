@@ -118,7 +118,7 @@ def _suggest_category(ticket: dict[str, Any]) -> tuple[str, str, list[str]]:
             matched[category] = hits
 
     if not scores:
-        return ticket.get("category", "other"), "low", []
+        return ticket.get("category", "other"), "not_detected", []
 
     selected = max(scores, key=scores.get)
     confidence = "high" if scores[selected] >= 3 else "moderate"
@@ -144,11 +144,11 @@ def _suggest_priority(ticket: dict[str, Any]) -> tuple[str, str]:
 def _find_knowledge_matches(
     ticket: dict[str, Any],
     articles: list[dict[str, Any]],
+    category_hint: str | None = None,
 ) -> list[dict[str, Any]]:
     ticket_terms = _terms(
         f"{ticket.get('title', '')} {ticket.get('description', '')}"
     )
-    ticket_category = ticket.get("category")
     ranked = []
 
     for article in articles:
@@ -162,7 +162,7 @@ def _find_knowledge_matches(
         )
         overlap = sorted(ticket_terms & article_terms)
         score = len(overlap)
-        if article.get("category") == ticket_category:
+        if category_hint and article.get("category") == category_hint:
             score += 3
 
         if score > 0:
@@ -187,6 +187,9 @@ def analyze_ticket(
         _suggest_category(ticket)
     )
     suggested_priority, priority_reason = _suggest_priority(ticket)
+    category_source = (
+        "keyword_match" if category_signals else "existing_ticket_fallback"
+    )
 
     original_text = (
         f"{ticket.get('title', '')} {ticket.get('description', '')}"
@@ -196,14 +199,18 @@ def analyze_ticket(
         summary += "..."
 
     category_matches = _find_knowledge_matches(
-        {**ticket, "category": suggested_category},
+        ticket,
         articles,
+        category_hint=(
+            suggested_category if category_source == "keyword_match" else None
+        ),
     )
 
     return {
         "ticket_key": ticket.get("ticket_key"),
         "summary": summary,
         "suggested_category": suggested_category,
+        "category_source": category_source,
         "category_confidence": category_confidence,
         "category_signals": category_signals,
         "suggested_priority": suggested_priority,

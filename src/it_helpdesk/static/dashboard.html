@@ -305,7 +305,8 @@ async function analyzeTicket(button) {
       <div class="ai-assist-meta">
         <span>Suggested category: <strong>${safe(data.suggested_category)}</strong></span>
         <span>Suggested priority: <strong>${safe(data.suggested_priority)}</strong></span>
-        <span>Confidence: <strong>${safe(data.category_confidence)}</strong></span>
+        <span>Category basis: <strong>${safe(data.category_source === "keyword_match" ? "Detected from ticket text" : "Existing ticket value · no keyword match")}</strong></span>
+        <span>Confidence: <strong>${safe(data.category_confidence === "not_detected" ? "Not detected" : data.category_confidence)}</strong></span>
       </div>
       <p><strong>Priority rationale:</strong> ${safe(data.priority_reason)}</p>
       <p><strong>Category signals:</strong> ${safe((data.category_signals || []).join(", ") || "No strong keyword match")}</p>
